@@ -601,7 +601,7 @@ thread_safe_var_set(thread_safe_var vp, void *cfdata,
     return pthread_mutex_unlock(&vp->write_lock);
 }
 
-#else /* USE_TSV_SLOT_PAIR_DESIGN */
+#else /* USE_TSV_SLOT_PAIR_DESIGN                                                                                                                                                                                                                                                                                                            */
 
 #include <sched.h>
 
