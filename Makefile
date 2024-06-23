@@ -66,7 +66,7 @@ t: t.o libtsgv.so
 	$(CC) $(CSANFLAG) -pie -o $@ $^ $(LDFLAGS) $(LDLIBS) -Wl,-rpath,$(PWD) -L$(PWD) -ltsgv
 
 mytest: mytest.o libtsgv.so
-	$(CC) $(CSANFLAG) -pie -o $@ $^ $(LDFLAGS) $(LDLIBS) -Wl,-rpath,$(PWD) -L$(PWD) -ltsgv
+	$(CC) $(CSANFLAG) -pie -o $@  $^ $(LDFLAGS) $(LDLIBS) -Wl,-rpath,$(PWD) -L$(PWD) -ltsgv
 
 valgrind-helgrind-t:
 	valgrind --tool=helgrind ./t
