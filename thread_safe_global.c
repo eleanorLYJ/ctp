@@ -191,7 +191,7 @@ wrapper_free(struct vwrapper *wrapper)
 {
     if (wrapper == NULL)
         return;
-    if (atomic_dec_32_nv(&wrapper->nref) > 0)
+    if (atomic_dec_32_nv(&wrapper->nref) > 0) // decreasing (by one) of the value //  The *_nv() variants are substantially more expensive on some platforms than the versions that do not return values.
         return;
     if (wrapper->dtor != NULL)
         wrapper->dtor(wrapper->ptr);
@@ -364,21 +364,25 @@ thread_safe_var_get(thread_safe_var vp, void **res, uint64_t *version)
     uint32_t nref;
     struct var *v;
     uint64_t vers;
-    struct vwrapper *wrapper;
-
+    struct vwrapper *wrapper; // on thread-global
+    
     if (version == NULL)
         version = &vers;
     *version = 0;
 
     *res = NULL;
 
+    // pthread_getspecific will return the pointer of specific-thread data which is associated with vp->tkey
+    // type of wrapper is struct vwrapper pointer?
+
+    // the thread of version is Newest == global version!
     if ((wrapper = pthread_getspecific(vp->tkey)) != NULL &&
         wrapper->version == atomic_read_64(&vp->next_version) - 1) {
 
         /* Fast path */
         *version = wrapper->version;
-        *res = wrapper->ptr;
-        return 0;
+        *res = wrapper->ptr; // actual value
+        return 0;  // success
     }
 
     /* Busy loop to get current slot.  Races with writers. */
@@ -601,7 +605,7 @@ thread_safe_var_set(thread_safe_var vp, void *cfdata,
     return pthread_mutex_unlock(&vp->write_lock);
 }
 
-#else /* USE_TSV_SLOT_PAIR_DESIGN                                                                                                                                                                                                                                                                                                            */
+#else /* USE_TSV_SLOT_PAIR_DESIGN                                                                                                                                                                                                                                                                                                        */
 
 #include <sched.h>
 
@@ -824,6 +828,7 @@ grow_slots(thread_safe_var vp, uint32_t slot_idx, int tries)
          */
         free(new_slots->slot_array);
         free(new_slots);
+        grow_slots(vp, slot_idx, tries - 1);
     }
 
     /*
@@ -832,7 +837,7 @@ grow_slots(thread_safe_var vp, uint32_t slot_idx, int tries)
      * the race we need to retry.  We could goto the top of the function
      * though, just in case there's no tail call optimization.
      */
-    return grow_slots(vp, slot_idx, tries - 1);
+    return 0; // success
 }
 
 /* Utility to destroy a thread-safe global variable */
