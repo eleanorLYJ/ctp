@@ -65,5 +65,11 @@ libtsgv.so: thread_safe_global.o atomics.o
 t: t.o libtsgv.so
 	$(CC) $(CSANFLAG) -pie -o $@ $^ $(LDFLAGS) $(LDLIBS) -Wl,-rpath,$(PWD) -L$(PWD) -ltsgv
 
+mytest: mytest.o libtsgv.so
+	$(CC) $(CSANFLAG) -pie -o $@  $^ $(LDFLAGS) $(LDLIBS) -Wl,-rpath,$(PWD) -L$(PWD) -ltsgv
+
+valgrind-helgrind-t:
+	valgrind --tool=helgrind ./t
+
 clean:
 	rm -f t t.o libtsgv.so thread_safe_global.o atomics.o
