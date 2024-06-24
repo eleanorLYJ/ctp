@@ -5,7 +5,6 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -18,11 +17,10 @@
 #include <unistd.h>
 #include "thread_safe_global.h"
 #include "atomics.h"
+#include <stdarg.h>
 
 #include <stdbool.h>
 #include <stdatomic.h>
-
-
 
 #if !defined(USE_TSV_SLOT_PAIR_DESIGN) && !defined(USE_TSV_SUBSCRIPTION_SLOTS_DESIGN)
 #define USE_TSV_SLOT_PAIR_DESIGN
@@ -33,6 +31,11 @@
 #ifdef USE_TSV_SUBSCRIPTION_SLOTS_DESIGN
 #define TSV_TYPE "slotlist"
 #endif
+#define MY_NTHREADS (nreaders + nwriters)
+#define MY_CALLOC1(v, n) (((v) = calloc((n), sizeof((v)[0]))) == NULL)
+
+#define VERBOSE 1  // Set verbosity level
+
 
 static void *reader(void *data);
 static void *writer(void *data);
@@ -44,10 +47,6 @@ static pthread_t *readers;
 static pthread_t *writers;
 static size_t nreaders;
 static size_t nwriters;
-#define MY_NTHREADS (nreaders + nwriters)
-
-static pthread_mutex_t exit_cv_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t exit_cv = PTHREAD_COND_INITIALIZER;
 
 enum magic {
     MAGIC_FREED = 0xABADCAFEEFACDABAUL,
@@ -55,7 +54,17 @@ enum magic {
     MAGIC_EXIT = 0xAABBCCDDFFEEDDCCUL,
 };
 
-thread_safe_var var;
+thread_safe_var shared_var;
+
+
+void printf_verbose(const char *format, ...) {
+    if (VERBOSE) {
+        va_list args;
+        va_start(args, format);
+        vprintf(format, args);
+        va_end(args);
+    }
+}
 
 int
 main()
@@ -68,14 +77,12 @@ main()
     nwriters = 2;
     unsigned long long count_readers[nreaders], count_writers[nwriters];
 
-    // memset(count_readers, 0, sizeof(count_readers));
-    // memset(count_writers, 0, sizeof(count_writers));
-
+    memset(count_readers, 0, sizeof(count_readers));
+    memset(count_writers, 0, sizeof(count_writers));
 
     printf("Will use %ju reader threads and %ju writer threads\n",
            (uintmax_t)nreaders, (uintmax_t)nwriters);
 
-#define MY_CALLOC1(v, n) (((v) = calloc((n), sizeof((v)[0]))) == NULL)
 
     if (MY_CALLOC1(readers, nreaders) ||
         MY_CALLOC1(writers, nwriters))
@@ -86,25 +93,17 @@ main()
     *magic_exit = MAGIC_EXIT;
     
 
-    if ((errno = thread_safe_var_init(&var, dtor)) != 0)
+    if ((errno = thread_safe_var_init(&shared_var, dtor)) != 0)
         err(1, "thread_safe_var_init() failed");
-
-
-    if ((errno = pthread_mutex_lock(&exit_cv_lock)) != 0)
-        err(1, "Failed to acquire exit lock");
 
     for (i = 0; i < nreaders; i++) {
         if ((errno = pthread_create(&readers[i], NULL, reader, &count_readers[i])) != 0)
             err(1, "Failed to create reader thread no. %ju", (uintmax_t)i);
-        // if ((errno = pthread_detach(readers[i])) != 0)
-        //     err(1, "Failed to detach reader thread no. %ju", (uintmax_t)i);
     }
 
     for (i = 0; i < nwriters; i++) {
         if ((errno = pthread_create(&writers[i], NULL, writer, &count_writers[i])) != 0)
             err(1, "Failed to create writer thread no. %ju", (uintmax_t)i);
-        // if ((errno = pthread_detach(writers[i])) != 0)
-        //     err(1, "Failed to detach writer thread no. %ju", (uintmax_t)i);
     }
     
     // Let the threads run for a while
@@ -135,7 +134,6 @@ main()
     return 0;
 }
 
-// last_version ?????
 static void *
 reader(void *_count)
 {
@@ -145,13 +143,11 @@ reader(void *_count)
     uint64_t last_version = 0;
     int first = 1;
     void *p;
-
-    printf("Enter reader function\n");
-    if ((errno = thread_safe_var_wait(var)) != 0)
+    if ((errno = thread_safe_var_wait((shared_var))) != 0)
         err(1, "thread_safe_var_wait() failed");
 
     while (!atomic_load(&stop_flag)) {
-        if ((errno = thread_safe_var_get(var, &p, &version)) != 0)
+        if ((errno = thread_safe_var_get((shared_var), &p, &version)) != 0)
             err(1, "thread_safe_var_get() failed");
 
         if (version < last_version)
@@ -174,14 +170,8 @@ reader(void *_count)
             first = 0;
         }
     }
-    printf("reader %llu!!\n", nr_reads);
+    printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
 
-    if ((errno = pthread_mutex_lock(&exit_cv_lock)) != 0)
-        err(1, "Failed to acquire exit lock");
-    if ((errno = pthread_cond_signal(&exit_cv)) != 0)
-        err(1, "Failed to signal exit cv");
-    if ((errno = pthread_mutex_unlock(&exit_cv_lock)) != 0)
-        err(1, "Failed to release exit lock");
 
     *count = nr_reads;
     return NULL;
@@ -201,7 +191,7 @@ writer(void *_count)
         if ((p = malloc(sizeof(*p))) == NULL)
             err(1, "malloc() failed");
         *p = MAGIC_INITED;
-        if ((errno = thread_safe_var_set(var, p, &version)) != 0)
+        if ((errno = thread_safe_var_set((shared_var), p, &version)) != 0)
             err(1, "thread_safe_var_set() failed");
         if (version < last_version)
             err(1, "version went backwards for this writer! "
@@ -211,14 +201,8 @@ writer(void *_count)
         nr_writes++;
     }
 
-    printf("writer %llu!!\n", nr_writes);
+    printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
 
-    if ((errno = pthread_mutex_lock(&exit_cv_lock)) != 0)
-        err(1, "Failed to acquire exit lock");
-    if ((errno = pthread_cond_signal(&exit_cv)) != 0)
-        err(1, "Failed to signal exit cv");
-    if ((errno = pthread_mutex_unlock(&exit_cv_lock)) != 0)
-        err(1, "Failed to release exit lock");
     
     *count = nr_writes;
     return NULL;
