@@ -8,12 +8,15 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <string.h>
+#include <err.h>
+
 
 // Define global variables and macros
 static struct rcu_data {
     int value;
     long long version;
-} *test_rcu_pointer = NULL;
+} *shared_ptr = NULL;
 
 #define NR_READERS 10
 #define NR_WRITERS 2
@@ -44,13 +47,14 @@ void *thr_writer(void *_count)
         assert(new);
         new->value = rand();  // Assign a random value
         new->version = atomic_fetch_add(&global_version, 1);
-        old = rcu_xchg_pointer(&test_rcu_pointer, new);
+        old = rcu_xchg_pointer(&shared_ptr, new);
 
         fprintf(writer_log, "Writer: value=%d, version=%lld\n", new->value, new->version);
         fflush(writer_log);
 
         synchronize_rcu();
         free(old);
+        old = NULL;
         nr_writes++;
     }
     printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
@@ -70,7 +74,7 @@ void *thr_reader(void *_count)
     
     while (!atomic_load(&stop_flag)) {
         rcu_read_lock();
-        local_ptr = rcu_dereference(test_rcu_pointer);
+        local_ptr = rcu_dereference(shared_ptr);
         if (local_ptr) {
             fprintf(reader_log, "Reader: value=%d, version=%lld\n", local_ptr->value, local_ptr->version);
             fflush(reader_log);
@@ -94,15 +98,17 @@ int main()
     pthread_t readers[NR_READERS], writers[NR_WRITERS];
     unsigned long long count_readers[NR_READERS], count_writers[NR_WRITERS];
     int i;
+    memset(readers, 0, sizeof(readers));
+    memset(writers, 0, sizeof(writers));
 
     // Initialize random number generator
     srand(time(NULL));
 
-    // Allocate memory for test_rcu_pointer and initialize
-    test_rcu_pointer = malloc(sizeof(struct rcu_data));
-    assert(test_rcu_pointer);
-    test_rcu_pointer->version = -1;
-    test_rcu_pointer->value = 0;
+    // Allocate memory for shared_ptr and initialize
+    shared_ptr = malloc(sizeof(struct rcu_data));
+    assert(shared_ptr);
+    shared_ptr->version = -1;
+    shared_ptr->value = 0;
 
     // Open log files
     writer_log = fopen("writer_log.txt", "w");
@@ -111,21 +117,21 @@ int main()
     // Create reader threads
     for (i = 0; i < NR_READERS; i++) {
         if (pthread_create(&readers[i], NULL, thr_reader, &count_readers[i])) {
-            perror("pthread_create");
-            exit(EXIT_FAILURE);
+            err(1, "Failed to create reader thread no. %ju", (uintmax_t)i);
         }
     }
 
     // Create writer threads
     for (i = 0; i < NR_WRITERS; i++) {
         if (pthread_create(&writers[i], NULL, thr_writer, &count_writers[i])) {
-            perror("pthread_create");
-            exit(EXIT_FAILURE);
+            err(1, "Failed to create writer thread no. %ju", (uintmax_t)i);
+
+
         }
     }
 
     // Let the threads run for a while (e.g., 10 seconds)
-    sleep(5);
+    sleep(10);
     
     // Signal the threads to stop
     atomic_store(&stop_flag, true);
@@ -152,8 +158,9 @@ int main()
         printf("Writer %d wrote %llu times\n", i, count_writers[i]);
     }
 
-    // Free the initial test_rcu_pointer
-    free(test_rcu_pointer);
+    // Free the initial shared_ptr
+    free(shared_ptr);
+    shared_ptr = NULL;
 
     return 0;
 }

@@ -14,13 +14,18 @@
 #define RCU_SIGNAL
 
 // Define global variables and macros
-static int *shared_var;
+static struct rcu_data {
+    int value;
+    long long version;
+} *shared_ptr = NULL;
 
 #define NR_READERS 10
 #define NR_WRITERS 2
 #define VERBOSE 1  // Set verbosity level
 
 atomic_bool stop_flag = false;
+FILE *writer_log, *reader_log;
+
 
 void printf_verbose(const char *format, ...) {
     if (VERBOSE) {
@@ -34,36 +39,45 @@ void printf_verbose(const char *format, ...) {
 void *thr_writer(void *_count) {
     unsigned long long *count = _count;
     unsigned long long nr_writes = 0;
-    int *new, *old;
+    struct rcu_data *new, *old;
+    static atomic_llong global_version = 0; // Global version counter to avoid conflicts between writers
+
     while (!atomic_load(&stop_flag)) {
         new = malloc(sizeof(int));
         assert(new);
-        *new = 8;
-        old = rcu_xchg_pointer(&shared_var, new);
+        new->value = rand();  // Assign a random value
+        new->version = atomic_fetch_add(&global_version, 1);
+        old = rcu_xchg_pointer(&shared_ptr, new);
+
+        fprintf(writer_log, "Writer: value=%d, version=%lld\n", new->value, new->version);
+        fflush(writer_log);
 
         synchronize_rcu();  // Wait for all readers to finish
-        if (old)
-            *old = 0;
+
         free(old);
+        old = NULL;
         nr_writes++;
     }
-    *count = nr_writes;
     printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
+    *count = nr_writes;
     return ((void*)2);
 }
 
 void *thr_reader(void *_count) {
     unsigned long long *count = _count;
     unsigned long long nr_reads = 0;
-    int *local_ptr;
+    struct rcu_data *local_ptr;
+
     
     rcu_register_thread();  // Register the thread with RCU
     
     while (!atomic_load(&stop_flag)) {
         rcu_read_lock();  // Start an RCU read-side critical section
-        local_ptr = rcu_dereference(shared_var);
-        if (local_ptr)
-            assert(*local_ptr == 8);
+        local_ptr = rcu_dereference(shared_ptr);
+        if (local_ptr){
+            fprintf(reader_log, "Reader: value=%d, version=%lld\n", local_ptr->value, local_ptr->version);
+            fflush(reader_log);
+        }
         rcu_read_unlock();  // End the RCU read-side critical section
         nr_reads++;
     }
@@ -81,8 +95,19 @@ int main() {
     int i;
     memset(readers, 0, sizeof(readers));
     memset(writers, 0, sizeof(writers));
-    printf("Will use %ju reader threads and %ju writer threads\n",
-           (uintmax_t)NR_READERS, (uintmax_t)NR_WRITERS);
+
+    // Initialize random number generator
+    srand(time(NULL));
+    
+    // Allocate memory for shared_ptr and initialize
+    shared_ptr = malloc(sizeof(struct rcu_data));
+    assert(shared_ptr);
+    shared_ptr->version = -1;
+    shared_ptr->value = 0;
+
+    // Open log files
+    writer_log = fopen("writer_log.txt", "w");
+    reader_log = fopen("reader_log.txt", "w");
 
     // Initialize RCU
     rcu_init();
@@ -90,8 +115,6 @@ int main() {
     // Create reader threads
     for (i = 0; i < NR_READERS; i++) {
         if (pthread_create(&readers[i], NULL, thr_reader, &count_readers[i])) {
-            // perror("pthread_create");
-            // exit(EXIT_FAILURE);
             err(1, "Failed to create reader thread no. %ju", (uintmax_t)i);
 
         }
@@ -118,6 +141,10 @@ int main() {
         pthread_join(writers[i], NULL);
     }
 
+    // Close log files
+    fclose(writer_log);
+    fclose(reader_log);
+
     // Print counts
     for (i = 0; i < NR_READERS; i++) {
         printf("Reader %d read %llu times\n", i, count_readers[i]);
@@ -125,6 +152,10 @@ int main() {
     for (i = 0; i < NR_WRITERS; i++) {
         printf("Writer %d wrote %llu times\n", i, count_writers[i]);
     }
+
+    // Free the initial shared_ptr
+    free(shared_ptr);
+    shared_ptr = NULL;
 
     return 0;
 }
