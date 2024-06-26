@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <string.h>
 #include <err.h>
+#include <stdarg.h>
+
 
 #include <urcu.h>
 #define RCU_SIGNAL
@@ -19,8 +21,6 @@ static struct rcu_data {
     long long version;
 } *shared_ptr = NULL;
 
-#define NR_READERS 10
-#define NR_WRITERS 2
 #define VERBOSE 1  // Set verbosity level
 
 atomic_bool stop_flag = false;
@@ -89,12 +89,22 @@ void *thr_reader(void *_count) {
     return ((void*)1);
 }
 
-int main() {
-    pthread_t readers[NR_READERS], writers[NR_WRITERS];
-    unsigned long long count_readers[NR_READERS], count_writers[NR_WRITERS];
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <num_readers> <num_writers>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    int num_readers = atoi(argv[1]);
+    int num_writers = atoi(argv[2]);
+
+    pthread_t readers[num_readers], writers[num_writers];
+    unsigned long long count_readers[num_readers], count_writers[num_writers];
     int i;
     memset(readers, 0, sizeof(readers));
     memset(writers, 0, sizeof(writers));
+    printf("Will use %ju reader threads and %ju writer threads\n",
+           (uintmax_t)num_readers, (uintmax_t)num_writers);
 
     // Initialize random number generator
     srand(time(NULL));
@@ -113,7 +123,7 @@ int main() {
     rcu_init();
 
     // Create reader threads
-    for (i = 0; i < NR_READERS; i++) {
+    for (i = 0; i < num_readers; i++) {
         if (pthread_create(&readers[i], NULL, thr_reader, &count_readers[i])) {
             err(1, "Failed to create reader thread no. %ju", (uintmax_t)i);
 
@@ -121,7 +131,7 @@ int main() {
     }
 
     // Create writer threads
-    for (i = 0; i < NR_WRITERS; i++) {
+    for (i = 0; i < num_writers; i++) {
         if (pthread_create(&writers[i], NULL, thr_writer, &count_writers[i])) {
             err(1, "Failed to create writer thread no. %ju", (uintmax_t)i);
         }
@@ -132,12 +142,12 @@ int main() {
     atomic_store(&stop_flag, true);
 
     // Join reader threads
-    for (i = 0; i < NR_READERS; i++) {
+    for (i = 0; i < num_readers; i++) {
         pthread_join(readers[i], NULL);
     }
 
     // Join writer threads
-    for (i = 0; i < NR_WRITERS; i++) {
+    for (i = 0; i < num_writers; i++) {
         pthread_join(writers[i], NULL);
     }
 
@@ -146,10 +156,10 @@ int main() {
     fclose(reader_log);
 
     // Print counts
-    for (i = 0; i < NR_READERS; i++) {
+    for (i = 0; i < num_readers; i++) {
         printf("Reader %d read %llu times\n", i, count_readers[i]);
     }
-    for (i = 0; i < NR_WRITERS; i++) {
+    for (i = 0; i < num_writers; i++) {
         printf("Writer %d wrote %llu times\n", i, count_writers[i]);
     }
 
