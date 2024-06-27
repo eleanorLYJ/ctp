@@ -56,7 +56,7 @@ $(CTP_SLOT_LIST_BIN): $(CTP_SRC)
 
 clean:
 	rm -f $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(MYTEST_BIN) $(MYTEST_SLOT_PAIR_BIN) $(MYTEST_SLOT_LIST_BIN) $(CTP_SLOT_PAIR_BIN) $(CTP_SLOT_LIST_BIN)
-	rm -f ./csv/*.csv
+	rm -f ./csv/*.csv *.txt *.png
 
 perf: all
 	$(PERF_CMD) ./$(QSBR_BIN)
