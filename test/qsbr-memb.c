@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -26,6 +28,11 @@ static struct rcu_data {
 atomic_bool stop_flag = false;
 FILE *writer_log, *reader_log;
 
+struct thread_info {
+    int core_id;
+    unsigned long long count;
+};
+
 
 void printf_verbose(const char *format, ...) {
     if (VERBOSE) {
@@ -36,8 +43,36 @@ void printf_verbose(const char *format, ...) {
     }
 }
 
-void *thr_writer(void *_count) {
-    unsigned long long *count = _count;
+void set_affinity(int cpu) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(cpu, &cpuset);
+
+    pthread_t current_thread = pthread_self();
+    int ret = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+    if (ret != 0) {
+        fprintf(stderr, "Error setting CPU affinity for thread %lu to CPU %d: %s\n", current_thread, cpu, strerror(ret));
+    }
+}
+
+void check_affinity() {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    pthread_t current_thread = pthread_self();
+    pthread_getaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+    for (int i = 0; i < CPU_SETSIZE; i++) {
+        if (CPU_ISSET(i, &cpuset)) {
+            printf("Thread %lu is running on CPU %d\n", current_thread, i);
+        }
+    }
+}
+
+void *thr_writer(void *arg) 
+{
+    struct thread_info *info = (struct thread_info *)arg;
+    set_affinity(info->core_id);
+    check_affinity();
+
     unsigned long long nr_writes = 0;
     struct rcu_data *new, *old;
     static atomic_llong global_version = 0; // Global version counter to avoid conflicts between writers
@@ -59,12 +94,15 @@ void *thr_writer(void *_count) {
         nr_writes++;
     }
     printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
-    *count = nr_writes;
+    info->count = nr_writes;
     return ((void*)2);
 }
 
-void *thr_reader(void *_count) {
-    unsigned long long *count = _count;
+void *thr_reader(void *arg) {
+    struct thread_info *info = (struct thread_info *)arg;
+    set_affinity(info->core_id);
+    check_affinity();
+
     unsigned long long nr_reads = 0;
     struct rcu_data *local_ptr;
 
@@ -84,7 +122,7 @@ void *thr_reader(void *_count) {
 
     rcu_unregister_thread();  // Unregister the thread from RCU
 
-    *count = nr_reads;
+    info->count = nr_reads;
     printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
     return ((void*)1);
 }
@@ -99,7 +137,7 @@ int main(int argc, char *argv[]) {
     int num_writers = atoi(argv[2]);
 
     pthread_t readers[num_readers], writers[num_writers];
-    unsigned long long count_readers[num_readers], count_writers[num_writers];
+    struct thread_info reader_info[num_readers], writer_info[num_writers];
     int i;
     memset(readers, 0, sizeof(readers));
     memset(writers, 0, sizeof(writers));
@@ -124,7 +162,9 @@ int main(int argc, char *argv[]) {
 
     // Create reader threads
     for (i = 0; i < num_readers; i++) {
-        if (pthread_create(&readers[i], NULL, thr_reader, &count_readers[i])) {
+        reader_info[i].core_id = i;
+        reader_info[i].count = 0;
+        if (pthread_create(&readers[i], NULL, thr_reader, &reader_info[i])) {
             err(1, "Failed to create reader thread no. %ju", (uintmax_t)i);
 
         }
@@ -132,7 +172,9 @@ int main(int argc, char *argv[]) {
 
     // Create writer threads
     for (i = 0; i < num_writers; i++) {
-        if (pthread_create(&writers[i], NULL, thr_writer, &count_writers[i])) {
+        writer_info[i].core_id = i + num_readers;
+        writer_info[i].count = 0;
+        if (pthread_create(&writers[i], NULL, thr_writer, &writer_info[i])) {
             err(1, "Failed to create writer thread no. %ju", (uintmax_t)i);
         }
     }
@@ -156,12 +198,10 @@ int main(int argc, char *argv[]) {
     fclose(reader_log);
 
     // Print counts
-    for (i = 0; i < num_readers; i++) {
-        printf("Reader %d read %llu times\n", i, count_readers[i]);
-    }
-    for (i = 0; i < num_writers; i++) {
-        printf("Writer %d wrote %llu times\n", i, count_writers[i]);
-    }
+    for (i = 0; i < num_readers; i++) 
+        printf("Reader %d read %llu times\n", i, reader_info[i].count);
+    for (i = 0; i < num_writers; i++) 
+        printf("Writer %d wrote %llu times\n", i, writer_info[i].count);
 
     // Free the initial shared_ptr
     free(shared_ptr);

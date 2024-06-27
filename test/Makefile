@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -ggdb3
+CFLAGS = -Wall -g
 
 # Source files
 QSBR_SRC = qsbr.c
@@ -7,6 +7,7 @@ SIGNAL_SRC = signal.c
 QSBR_MB_SRC = qsbr-mb.c
 QSBR_MEMB_SRC = qsbr-memb.c
 QSBR_BP_SRC = qsbr-bp.c
+MYTEST_SRC = ctp.c
 
 # Output binaries
 QSBR_BIN = qsbr
@@ -14,6 +15,9 @@ SIGNAL_BIN = signal
 QSBR_MB_BIN = mb
 QSBR_MEMB_BIN = memb
 QSBR_BP_BIN = bp
+MYTEST_BIN = ctp
+MYTEST_SLOT_PAIR_BIN = ctp_slotpair
+MYTEST_SLOT_LIST_BIN = ctp_slotlist
 
 # Libraries
 QSBR_LIBS = -lurcu-qsbr -lpthread
@@ -21,12 +25,13 @@ SIGNAL_LIBS = -lurcu -lurcu-signal -lpthread
 QSBR_MB_LIBS = -lurcu -lurcu-mb -lpthread
 QSBR_MEMB_LIBS = -lurcu -lpthread
 QSBR_BP_LIBS = -lurcu-bp -lpthread
+MYTEST_LIBS = -L../ -ltsgv -lpthread
 
 # Perf command
 PERF_CMD = perf stat -e cycles,instructions,cache-references,cache-misses
 
 # Targets
-all: $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN)
+all: $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(MYTEST_BIN) $(MYTEST_SLOT_PAIR_BIN) $(MYTEST_SLOT_LIST_BIN)
 
 $(QSBR_BIN): $(QSBR_SRC)
 	$(CC) $(CFLAGS) -o $@ $< $(QSBR_LIBS)
@@ -43,8 +48,18 @@ $(QSBR_MEMB_BIN): $(QSBR_MEMB_SRC)
 $(QSBR_BP_BIN): $(QSBR_BP_SRC)
 	$(CC) $(CFLAGS) -o $@ $< $(QSBR_BP_LIBS)
 
+$(MYTEST_BIN): $(MYTEST_SRC)
+	$(CC) $(CFLAGS) -o $@ $< $(MYTEST_LIBS) -g -Wl,-rpath,..
+
+$(MYTEST_SLOT_PAIR_BIN): $(MYTEST_SRC)
+	$(CC) $(CFLAGS) -DUSE_TSV_SLOT_PAIR_DESIGN -o $@ $< $(MYTEST_LIBS) -Wl,-rpath,..
+
+$(MYTEST_SLOT_LIST_BIN): $(MYTEST_SRC)
+	$(CC) $(CFLAGS) -DUSE_TSV_SUBSCRIPTION_SLOTS_DESIGN -o $@ $< $(MYTEST_LIBS) -Wl,-rpath,..
+
 clean:
-	rm -f $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN)
+	rm -f $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(MYTEST_BIN) $(MYTEST_SLOT_PAIR_BIN) $(MYTEST_SLOT_LIST_BIN)
+	rm -f ./csv/*.csv
 
 perf: all
 	$(PERF_CMD) ./$(QSBR_BIN)

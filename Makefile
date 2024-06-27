@@ -11,7 +11,7 @@ endif
 COPTFLAG = -O0
 CDBGFLAG = -ggdb3
 CSANFLAG = -fsanitize=undefined -fsanitize=thread
-
+CSANFLAG = 
 # Atomics backends: -DHAVE___ATOMIC,
 # 		    -DHAVE___SYNC,
 # 		    Win32 (do not set/define),
