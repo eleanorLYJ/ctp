@@ -27,10 +27,15 @@ QSBR_BP_LIBS = -lurcu-bp -lpthread
 CTP_LIBS = -L../ -ltsgv -lpthread
 
 # Perf command
-PERF_CMD = perf stat -e cycles,instructions,cache-references,cache-misses
+# PERF_CMD = perf stat -e cycles,instructions,cache-references,cache-misses,context-switches
+PERF_CMD = perf stat -e cache-misses,context-switches,cpu-migrations
+
+
+NUM_READERS = 5
+NUM_WRITERS = 2
 
 # Targets
-all: $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(MYTEST_BIN) $(MYTEST_SLOT_PAIR_BIN) $(MYTEST_SLOT_LIST_BIN) $(CTP_SLOT_PAIR_BIN) $(CTP_SLOT_LIST_BIN) $(CTP_SLOT_LIST_BIN) $(CTP_SLOT_PAIR_BIN)
+all: $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(CTP_SLOT_PAIR_BIN) $(CTP_SLOT_LIST_BIN) $(CTP_SLOT_LIST_BIN) $(CTP_SLOT_PAIR_BIN)
 
 $(QSBR_BIN): $(QSBR_SRC)
 	$(CC) $(CFLAGS) -o $@ $< $(QSBR_LIBS)
@@ -55,12 +60,15 @@ $(CTP_SLOT_LIST_BIN): $(CTP_SRC)
 	$(CC) $(CFLAGS) -DUSE_SLOT_LIST_DESIGN -o $@ $< $(CTP_LIBS) -Wl,-rpath,..
 
 clean:
-	rm -f $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(MYTEST_BIN) $(MYTEST_SLOT_PAIR_BIN) $(MYTEST_SLOT_LIST_BIN) $(CTP_SLOT_PAIR_BIN) $(CTP_SLOT_LIST_BIN)
+	rm -f $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(CTP_SLOT_PAIR_BIN) $(CTP_SLOT_LIST_BIN)
 	rm -f ./csv/*.csv *.txt *.png
 
 perf: all
-	$(PERF_CMD) ./$(QSBR_BIN)
-	$(PERF_CMD) ./$(SIGNAL_BIN)
-	$(PERF_CMD) ./$(QSBR_MB_BIN)
-	$(PERF_CMD) ./$(QSBR_MEMB_BIN)
-	$(PERF_CMD) ./$(QSBR_BP_BIN)
+	$(PERF_CMD) ./$(QSBR_BIN) $(NUM_READERS) $(NUM_WRITERS)
+	$(PERF_CMD) ./$(SIGNAL_BIN) $(NUM_READERS) $(NUM_WRITERS)
+	$(PERF_CMD) ./$(QSBR_MB_BIN) $(NUM_READERS) $(NUM_WRITERS)
+	$(PERF_CMD) ./$(QSBR_MEMB_BIN) $(NUM_READERS) $(NUM_WRITERS)
+	$(PERF_CMD) ./$(QSBR_BP_BIN) $(NUM_READERS) $(NUM_WRITERS)
+	$(PERF_CMD) ./$(CTP_SLOT_PAIR_BIN) $(NUM_READERS) $(NUM_WRITERS)
+	$(PERF_CMD) ./$(CTP_SLOT_LIST_BIN) $(NUM_READERS) $(NUM_WRITERS)
+

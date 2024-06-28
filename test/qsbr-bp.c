@@ -179,7 +179,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Let the threads run for a while
-    sleep(10);
+    sleep(1);
     atomic_store(&stop_flag, true);
 
     // Join reader threads

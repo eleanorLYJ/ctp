@@ -173,8 +173,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Let the threads run for a while (e.g., 10 seconds)
-    sleep(10);
+    // Let the threads run for a while (e.g., 1seconds)
+    sleep(1);
     
     // Signal the threads to stop
     atomic_store(&stop_flag, true);
