@@ -27,11 +27,9 @@ QSBR_BP_LIBS = -lurcu-bp -lpthread
 CTP_LIBS = -L../ -ltsgv -lpthread
 
 # Perf command
-# PERF_CMD = perf stat -e cycles,instructions,cache-references,cache-misses,context-switches
-PERF_CMD = perf stat -e cache-misses,context-switches,cpu-migrations
+PERF_CMD = perf stat -e cycles,instructions,cache-references,cache-misses,context-switches,cpu-migrations
 
-
-NUM_READERS = 5
+NUM_READERS = 10
 NUM_WRITERS = 2
 
 # Targets

@@ -6,11 +6,9 @@ import matplotlib.pyplot as plt
 from multiprocessing import Pool
 
 # Paths to C source files and executables
-# executables = ["./qsbr", "./bp", "./mb", "./memb", "./signal", "./ctp_slotpair", "./ctp_slotlist"]
-# urcu_names = ["qsbr", "qsbr-bp", "qsbr-mb", "qsbr-memb", "signal", "ctp_slotpair", "ctp_slotlist"]
+executables = ["./qsbr", "./bp", "./mb", "./memb", "./signal", "./slotpair", "./slotlist"]
+urcu_names = ["qsbr", "qsbr-bp", "qsbr-mb", "qsbr-memb", "signal", "slotpair", "slotlist"]
 
-executables = ["./bp", "./bp-not_register_thread"]
-urcu_names = ["qsbr-bp", "qsbr-bp_no_register_thread"]
 # Directory to save CSV files
 csv_dir = "csv"
 os.makedirs(csv_dir, exist_ok=True)
@@ -18,25 +16,28 @@ os.makedirs(csv_dir, exist_ok=True)
 # Function to compile the C programs
 def compile_programs():
     compile_commands = [
-        # "gcc -o qsbr qsbr.c -lurcu-qsbr -lpthread",
+        "gcc -o qsbr qsbr.c -lurcu-qsbr -lpthread",
         "gcc -o bp qsbr-bp.c -lurcu-bp -lpthread",
-        "gcc -o bp-not_register_thread qsbr-bp_no_reg.c -lurcu-bp -lpthread",
-
-        # "gcc -o mb qsbr-mb.c -lurcu -lurcu-mb -lpthread",
-        # "gcc -o memb qsbr-memb.c -lurcu -lpthread",
-        # "gcc -o signal signal.c -lurcu -lurcu-signal -lpthread",
-        # "gcc -o ctp_slotpair ctp.c -DUSE_SLOT_PAIR_DESIGN -L../ -ltsgv -lpthread -Wl,-rpath,../",
-        # "gcc -o ctp_slotlist ctp.c -DUSE_SLOT_LIST_DESIGN -L../ -ltsgv -lpthread -Wl,-rpath,../"
+        "gcc -o mb qsbr-mb.c -lurcu -lurcu-mb -lpthread",
+        "gcc -o memb qsbr-memb.c -lurcu -lpthread",
+        "gcc -o signal signal.c -lurcu -lurcu-signal -lpthread",
+        "gcc -o slotpair ctp.c -DUSE_SLOT_PAIR_DESIGN -L../ -ltsgv -lpthread -Wl,-rpath,../",
+        "gcc -o slotlist ctp.c -DUSE_SLOT_LIST_DESIGN -L../ -ltsgv -lpthread -Wl,-rpath,../"
     ]
     
     for command in compile_commands:
         subprocess.run(command, shell=True, check=True)
 
-# Function to execute the programs and capture the output
-def execute_program(executable, num_readers, num_writers):
+# Function to execute the programs and capture the output with CPU affinity
+def execute_program(executable, num_readers, num_writers, cpus):
     env = os.environ.copy()
     env["LD_LIBRARY_PATH"] = "../"  # Ensure the path to libtsgv.so is included
-    result = subprocess.run([executable, str(num_readers), str(num_writers)], capture_output=True, text=True, env=env)
+
+    # Prepare the taskset command with the specified CPUs
+    cpu_list = ','.join(map(str, cpus))
+    taskset_command = ['taskset', '-c', cpu_list, executable, str(num_readers), str(num_writers)]
+    
+    result = subprocess.run(taskset_command, capture_output=True, text=True, env=env)
     return result.stdout
 
 # Function to parse the output and save to CSV
@@ -112,10 +113,13 @@ def compile_and_execute(num_readers):
 
     # Compile all programs
     compile_programs()
-    
+    # Generate CPU list based on the number of readers and writers
+    total_threads = num_readers + num_writers
+    num_cores = os.cpu_count() // 2  # Assuming hyperthreading is disabled, and you have half the number of logical CPUs
+    cpus = list(range(min(total_threads, num_cores)))
     # Execute each compiled program and collect results
     for exe in executables:
-        output = execute_program(exe, num_readers, num_writers)
+        output = execute_program(exe, num_readers, num_writers, cpus)
         parse_and_save_output(output, exe, num_readers, num_writers)
 
 # Main script execution

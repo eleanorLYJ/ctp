@@ -28,11 +28,16 @@ def compile_programs():
     for command in compile_commands:
         subprocess.run(command, shell=True, check=True)
 
-# Function to execute the programs and capture the output
-def execute_program(executable, num_readers, num_writers):
+# Function to execute the programs and capture the output with CPU affinity
+def execute_program(executable, num_readers, num_writers, cpus):
     env = os.environ.copy()
     env["LD_LIBRARY_PATH"] = "../"  # Ensure the path to libtsgv.so is included
-    result = subprocess.run([executable, str(num_readers), str(num_writers)], capture_output=True, text=True, env=env)
+
+    # Prepare the taskset command with the specified CPUs
+    cpu_list = ','.join(map(str, cpus))
+    taskset_command = ['taskset', '-c', cpu_list, executable, str(num_readers), str(num_writers)]
+    
+    result = subprocess.run(taskset_command, capture_output=True, text=True, env=env)
     return result.stdout
 
 # Function to parse the output and save to CSV
@@ -110,10 +115,14 @@ def compile_and_execute(num_readers):
 
     # Compile all programs
     compile_programs()
-    
+    # Generate CPU list based on the number of readers and writers
+    total_threads = num_readers + num_writers
+    num_cores = os.cpu_count() // 2  # Assuming hyperthreading is disabled, and you have half the number of logical CPUs
+    cpus = list(range(min(total_threads, num_cores)))
+
     # Execute each compiled program and collect results
     for exe in executables:
-        output = execute_program(exe, num_readers, num_writers)
+        output = execute_program(exe, num_readers, num_writers, cpus)
         parse_and_save_output(output, exe, num_readers, num_writers)
 
 # Main script execution
