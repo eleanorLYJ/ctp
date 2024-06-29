@@ -27,11 +27,14 @@ static struct rcu_data {
 
 atomic_bool stop_flag = false;
 FILE *writer_log, *reader_log;
+int *valid_cpus;
+int num_valid_cpus;
 
 struct thread_info {
     int core_id;
     unsigned long long count;
 };
+
 
 void printf_verbose(const char *format, ...) {
     if (VERBOSE) {
@@ -41,6 +44,7 @@ void printf_verbose(const char *format, ...) {
         va_end(args);
     }
 }
+
 void set_affinity(int cpu) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -64,11 +68,54 @@ void check_affinity() {
         }
     }
 }
+int get_valid_cpu(int core_id) {
+    if (core_id >= num_valid_cpus) {
+        return -1;
+    }
+    return valid_cpus[core_id];
+}
+
+void parse_cpu_list(const char *cpu_list) {
+    char *token;
+    char *cpu_list_copy = strdup(cpu_list);
+    int count = 0;
+
+    token = strtok(cpu_list_copy, ",");
+    while (token != NULL) {
+        count++;
+        token = strtok(NULL, ",");
+    }
+
+    free(cpu_list_copy);
+    valid_cpus = malloc(count * sizeof(int));
+    if (!valid_cpus) {
+        perror("Failed to allocate memory for valid_cpus");
+        exit(EXIT_FAILURE);
+    }
+
+    cpu_list_copy = strdup(cpu_list);
+    count = 0;
+
+    token = strtok(cpu_list_copy, ",");
+    while (token != NULL) {
+        valid_cpus[count++] = atoi(token);
+        token = strtok(NULL, ",");
+    }
+
+    num_valid_cpus = count;
+    free(cpu_list_copy);
+}
 
 void *thr_writer(void *arg) 
 {
     struct thread_info *info = (struct thread_info *)arg;
-    set_affinity(info->core_id);
+    int core_id = get_valid_cpu(info->core_id);
+        if (core_id >= 0) {
+        set_affinity(core_id);
+    } else {
+        fprintf(stderr, "Invalid core ID: %d\n", core_id);
+        fflush(stderr);
+    }
     check_affinity();
 
     unsigned long long nr_writes = 0;
@@ -76,7 +123,7 @@ void *thr_writer(void *arg)
     static atomic_llong global_version = 0; // Global version counter to avoid conflicts between writers
 
     while (!atomic_load(&stop_flag)) {
-        new = malloc(sizeof(struct rcu_data));
+        new = malloc(sizeof(int));
         assert(new);
         new->value = rand();  // Assign a random value
         new->version = atomic_fetch_add(&global_version, 1);
@@ -96,11 +143,16 @@ void *thr_writer(void *arg)
     return ((void*)2);
 }
 
-void *thr_reader(void *arg) 
-{
-
+void *thr_reader(void *arg) {
     struct thread_info *info = (struct thread_info *)arg;
-    set_affinity(info->core_id);
+    int core_id = get_valid_cpu(info->core_id);
+
+    if (core_id >= 0) {
+        set_affinity(core_id);
+    } else {
+        fprintf(stderr, "Invalid core ID: %d\n", core_id);
+        fflush(stderr);
+    }
     check_affinity();
 
     unsigned long long nr_reads = 0;
@@ -112,7 +164,7 @@ void *thr_reader(void *arg)
     while (!atomic_load(&stop_flag)) {
         rcu_read_lock();  // Start an RCU read-side critical section
         local_ptr = rcu_dereference(shared_ptr);
-        if (local_ptr) {
+        if (local_ptr){
             fprintf(reader_log, "Reader: value=%d, version=%lld\n", local_ptr->value, local_ptr->version);
             fflush(reader_log);
         }
@@ -127,15 +179,17 @@ void *thr_reader(void *arg)
     return ((void*)1);
 }
 
+
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <num_readers> <num_writers>\n", argv[0]);
+    if (argc != 4) {
+        fprintf(stderr, "Usage: %s <num_readers> <num_writers> <valid_cpus>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
     int num_readers = atoi(argv[1]);
     int num_writers = atoi(argv[2]);
-
+    parse_cpu_list(argv[3]);
+    
     pthread_t readers[num_readers], writers[num_writers];
     struct thread_info reader_info[num_readers], writer_info[num_writers];
     int i;
@@ -143,9 +197,10 @@ int main(int argc, char *argv[]) {
     memset(writers, 0, sizeof(writers));
     printf("Will use %ju reader threads and %ju writer threads\n",
            (uintmax_t)num_readers, (uintmax_t)num_writers);
-           
+
     // Initialize random number generator
     srand(time(NULL));
+    
     // Allocate memory for shared_ptr and initialize
     shared_ptr = malloc(sizeof(struct rcu_data));
     assert(shared_ptr);
@@ -165,6 +220,7 @@ int main(int argc, char *argv[]) {
         reader_info[i].count = 0;
         if (pthread_create(&readers[i], NULL, thr_reader, &reader_info[i])) {
             err(1, "Failed to create reader thread no. %ju", (uintmax_t)i);
+
         }
     }
 
@@ -196,13 +252,10 @@ int main(int argc, char *argv[]) {
     fclose(reader_log);
 
     // Print counts
-    for (i = 0; i < num_readers; i++) {
+    for (i = 0; i < num_readers; i++) 
         printf("Reader %d read %llu times\n", i, reader_info[i].count);
-
-    }
-    for (i = 0; i < num_writers; i++) {
+    for (i = 0; i < num_writers; i++) 
         printf("Writer %d wrote %llu times\n", i, writer_info[i].count);
-    }
 
     // Free the initial shared_ptr
     free(shared_ptr);

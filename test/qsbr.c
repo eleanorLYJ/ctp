@@ -23,6 +23,8 @@ static struct rcu_data {
 
 atomic_bool stop_flag = false;
 FILE *writer_log, *reader_log;
+int *valid_cpus;
+int num_valid_cpus;
 
 struct thread_info {
     int core_id;
@@ -63,10 +65,54 @@ void check_affinity() {
     }
 }
 
+int get_valid_cpu(int core_id) {
+    if (core_id >= num_valid_cpus) {
+        return -1;
+    }
+    return valid_cpus[core_id];
+}
+
+void parse_cpu_list(const char *cpu_list) {
+    char *token;
+    char *cpu_list_copy = strdup(cpu_list);
+    int count = 0;
+
+    token = strtok(cpu_list_copy, ",");
+    while (token != NULL) {
+        count++;
+        token = strtok(NULL, ",");
+    }
+
+    free(cpu_list_copy);
+    valid_cpus = malloc(count * sizeof(int));
+    if (!valid_cpus) {
+        perror("Failed to allocate memory for valid_cpus");
+        exit(EXIT_FAILURE);
+    }
+
+    cpu_list_copy = strdup(cpu_list);
+    count = 0;
+
+    token = strtok(cpu_list_copy, ",");
+    while (token != NULL) {
+        valid_cpus[count++] = atoi(token);
+        token = strtok(NULL, ",");
+    }
+
+    num_valid_cpus = count;
+    free(cpu_list_copy);
+}
+
 void *thr_writer(void *arg) 
 {
     struct thread_info *info = (struct thread_info *)arg;
-    set_affinity(info->core_id);
+    int core_id = get_valid_cpu(info->core_id);
+        if (core_id >= 0) {
+        set_affinity(core_id);
+    } else {
+        fprintf(stderr, "Invalid core ID: %d\n", core_id);
+        fflush(stderr);
+    }
     check_affinity();
 
     unsigned long long nr_writes = 0;
@@ -95,7 +141,14 @@ void *thr_writer(void *arg)
 void *thr_reader(void *arg) 
 {
     struct thread_info *info = (struct thread_info *)arg;
-    set_affinity(info->core_id);
+    int core_id = get_valid_cpu(info->core_id);
+
+    if (core_id >= 0) {
+        set_affinity(core_id);
+    } else {
+        fprintf(stderr, "Invalid core ID: %d\n", core_id);
+        fflush(stderr);
+    }
     check_affinity();
 
     unsigned long long nr_reads = 0;
@@ -127,13 +180,14 @@ void *thr_reader(void *arg)
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <num_readers> <num_writers>\n", argv[0]);
+    if (argc != 4) {
+        fprintf(stderr, "Usage: %s <num_readers> <num_writers> <valid_cpus>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
     int num_readers = atoi(argv[1]);
     int num_writers = atoi(argv[2]);
+    parse_cpu_list(argv[3]);
 
     pthread_t readers[num_readers], writers[num_writers];
     struct thread_info reader_info[num_readers], writer_info[num_writers];

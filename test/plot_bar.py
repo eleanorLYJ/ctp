@@ -35,7 +35,7 @@ def execute_program(executable, num_readers, num_writers, cpus):
 
     # Prepare the taskset command with the specified CPUs
     cpu_list = ','.join(map(str, cpus))
-    taskset_command = ['taskset', '-c', cpu_list, executable, str(num_readers), str(num_writers)]
+    taskset_command = ['taskset', '-c', cpu_list, executable, str(num_readers), str(num_writers), "0,2,4,6,8,9,10,11"]
     
     result = subprocess.run(taskset_command, capture_output=True, text=True, env=env)
     return result.stdout

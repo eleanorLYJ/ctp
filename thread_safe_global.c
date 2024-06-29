@@ -783,15 +783,6 @@ grow_slots(thread_safe_var vp, uint32_t slot_idx, int tries)
 
     additions = (nslots == 0) ? 4 : nslots + nslots / 2;
     while (slot_idx >= nslots + additions) {
-        /*
-         * In this case we're racing with other readers to grow the slot
-         * list, but if we lose the race then our slot_idx may not be
-         * covered in the list as grown by the winner.  We may have to
-         * try again.
-         *
-         * There's always a winner, so eventually we won't need to try
-         * again.
-         */
         additions += additions + additions / 2;
         tries++;
     }
@@ -824,6 +815,7 @@ grow_slots(thread_safe_var vp, uint32_t slot_idx, int tries)
          */
         free(new_slots->slot_array);
         free(new_slots);
+        grow_slots(vp, slot_idx, tries);
     }
 
     /*
@@ -832,7 +824,7 @@ grow_slots(thread_safe_var vp, uint32_t slot_idx, int tries)
      * the race we need to retry.  We could goto the top of the function
      * though, just in case there's no tail call optimization.
      */
-    return grow_slots(vp, slot_idx, tries - 1);
+    return 0;
 }
 
 /* Utility to destroy a thread-safe global variable */
