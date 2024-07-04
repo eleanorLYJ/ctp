@@ -1,5 +1,4 @@
-Required libtsgv.so in parent directory
-**Required:** `libtsgv.so`, you can get it by `make` in the previous folder.
+**Required:** `libtsgv.so`, you can get it by `make` in the parent directory.
 
 **Instructions:**
 
