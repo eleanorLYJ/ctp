@@ -31,15 +31,15 @@ struct thread_info {
     unsigned long long count;
 };
 
-void printf_verbose(const char *format, ...) 
-{
-    if (VERBOSE) {
-        va_list args;
-        va_start(args, format);
-        vprintf(format, args);
-        va_end(args);
-    }
-}
+// void printf_verbose(const char *format, ...) 
+// {
+//     if (VERBOSE) {
+//         va_list args;
+//         va_start(args, format);
+//         vprintf(format, args);
+//         va_end(args);
+//     }
+// }
 
 void set_affinity(int cpu) {
     cpu_set_t cpuset;
@@ -58,19 +58,17 @@ void check_affinity() {
     CPU_ZERO(&cpuset);
     pthread_t current_thread = pthread_self();
     pthread_getaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-    for (int i = 0; i < CPU_SETSIZE; i++) {
-        if (CPU_ISSET(i, &cpuset)) {
-            printf("Thread %lu is running on CPU %d\n", current_thread, i);
-        }
-    }
+    // for (int i = 0; i < CPU_SETSIZE; i++) {
+    //     if (CPU_ISSET(i, &cpuset)) {
+    //         printf("Thread %lu is running on CPU %d\n", current_thread, i);
+    //     }
+    // }
 }
 
 int get_valid_cpu(int core_id) {
-    if (core_id >= num_valid_cpus) {
-        return -1;
-    }
-    return valid_cpus[core_id];
+    return valid_cpus[core_id % num_valid_cpus];
 }
+
 
 void parse_cpu_list(const char *cpu_list) {
     char *token;
@@ -107,12 +105,13 @@ void *thr_writer(void *arg)
 {
     struct thread_info *info = (struct thread_info *)arg;
     int core_id = get_valid_cpu(info->core_id);
-        if (core_id >= 0) {
+    if (core_id >= 0) {
         set_affinity(core_id);
     } else {
         fprintf(stderr, "Invalid core ID: %d\n", core_id);
         fflush(stderr);
     }
+    
     check_affinity();
 
     unsigned long long nr_writes = 0;
@@ -133,7 +132,7 @@ void *thr_writer(void *arg)
         free(old);
         nr_writes++;
     }
-    printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
+    // printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
     info->count = nr_writes;
     return ((void*)2);
 }
@@ -175,7 +174,7 @@ void *thr_reader(void *arg)
     rcu_unregister_thread();
 
     info->count = nr_reads;
-    printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
+    // printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
     return ((void*)1);
 }
 
@@ -248,13 +247,11 @@ int main(int argc, char *argv[]) {
     fclose(reader_log);
 
     // Print counts
-    for (i = 0; i < num_readers; i++) {
+    for (i = 0; i < num_readers; i++) 
         printf("Reader %d read %llu times\n", i, reader_info[i].count);
-    }
-    for (i = 0; i < num_writers; i++) {
+    for (i = 0; i < num_writers; i++) 
         printf("Writer %d wrote %llu times\n", i, writer_info[i].count);
-    }
-
+    
     // Free the initial shared_ptr
     free(shared_ptr);
     shared_ptr = NULL;

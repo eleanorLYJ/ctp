@@ -35,14 +35,14 @@ struct thread_info {
 int *valid_cpus;
 int num_valid_cpus;
 
-void printf_verbose(const char *format, ...) {
-    if (VERBOSE) {
-        va_list args;
-        va_start(args, format);
-        vprintf(format, args);
-        va_end(args);
-    }
-}
+// void printf_verbose(const char *format, ...) {
+//     if (VERBOSE) {
+//         va_list args;
+//         va_start(args, format);
+//         vprintf(format, args);
+//         va_end(args);
+//     }
+// }
 
 void set_affinity(int cpu) {
     cpu_set_t cpuset;
@@ -61,17 +61,14 @@ void check_affinity() {
     CPU_ZERO(&cpuset);
     pthread_t current_thread = pthread_self();
     pthread_getaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
-    for (int i = 0; i < CPU_SETSIZE; i++) {
-        if (CPU_ISSET(i, &cpuset)) {
-            printf("Thread %lu is running on CPU %d\n", current_thread, i);
-        }
-    }
+    // for (int i = 0; i < CPU_SETSIZE; i++) {
+    //     if (CPU_ISSET(i, &cpuset)) {
+    //         printf("Thread %lu is running on CPU %d\n", current_thread, i);
+    //     }
+    // }
 }
 int get_valid_cpu(int core_id) {
-    if (core_id >= num_valid_cpus) {
-        return -1;
-    }
-    return valid_cpus[core_id];
+    return valid_cpus[core_id % num_valid_cpus];
 }
 
 void parse_cpu_list(const char *cpu_list) {
@@ -137,7 +134,7 @@ void *thr_writer(void *arg)
         old = NULL;
         nr_writes++;
     }
-    printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
+    // printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
     info->count = nr_writes;
     return ((void*)2);
 }
@@ -174,7 +171,7 @@ void *thr_reader(void *arg) {
     rcu_unregister_thread();  // Unregister the thread from RCU
 
     info->count = nr_reads;
-    printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
+    // printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
     return ((void*)1);
 }
 
@@ -255,6 +252,7 @@ int main(int argc, char *argv[]) {
         printf("Reader %d read %llu times\n", i, reader_info[i].count);
     for (i = 0; i < num_writers; i++) 
         printf("Writer %d wrote %llu times\n", i, writer_info[i].count);
+
 
     // Free the initial shared_ptr
     free(shared_ptr);

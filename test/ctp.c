@@ -55,14 +55,14 @@ enum magic {
     MAGIC_EXIT = 0xAABBCCDDFFEEDDCCUL,
 };
 
-void printf_verbose(const char *format, ...) {
-    if (VERBOSE) {
-        va_list args;
-        va_start(args, format);
-        vprintf(format, args);
-        va_end(args);
-    }
-}
+// void printf_verbose(const char *format, ...) {
+//     if (VERBOSE) {
+//         va_list args;
+//         va_start(args, format);
+//         vprintf(format, args);
+//         va_end(args);
+//     }
+// }
 
 void set_affinity(int cpu) {
     cpu_set_t cpuset;
@@ -88,12 +88,12 @@ void check_affinity() {
         return;
     }
     
-    for (int i = 0; i < CPU_SETSIZE; i++) {
-        if (CPU_ISSET(i, &cpuset)) {
-            printf("Thread %lu is running on CPU %d\n", current_thread, i);
-            fflush(stdout);
-        }
-    }
+    // for (int i = 0; i < CPU_SETSIZE; i++) {
+    //     if (CPU_ISSET(i, &cpuset)) {
+    //         printf("Thread %lu is running on CPU %d\n", current_thread, i);
+    //         fflush(stdout);
+    //     }
+    // }
 }
 
 // int valid_cpus[] = {0, 2, 4, 6, 8, 9, 10, 11}; // List of valid CPUs after disabling hyperthreading
@@ -134,10 +134,7 @@ void parse_cpu_list(const char *cpu_list) {
 }
 
 int get_valid_cpu(int core_id) {
-    if (core_id >= num_valid_cpus) {
-        return -1;
-    }
-    return valid_cpus[core_id];
+    return valid_cpus[core_id % num_valid_cpus];
 }
 
 int main(int argc, char *argv[]) 
@@ -274,7 +271,7 @@ reader(void *arg)
         }
     }
     info->count = nr_reads;
-    printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
+    // printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
     return NULL;
 }
 
@@ -312,7 +309,7 @@ writer(void *arg)
         nr_writes++;
     }
 
-    printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
+    // printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
     info->count = nr_writes;
     return NULL;
 }

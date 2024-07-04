@@ -27,40 +27,40 @@ QSBR_BP_LIBS = -lurcu-bp -lpthread
 CTP_LIBS = -L../ -ltsgv -lpthread
 
 # Perf command
-PERF_CMD = perf stat -e cycles,instructions,cache-references,cache-misses,context-switches,cpu-migrations
+PERF_CMD = perf stat -e cycles,task-clock,instructions,context-switches,cpu-migrations,cache-references,cache-misses,L1-dcache-loads,L1-dcache-stores,LLC-load-misses,LLC-store-misses
 
-NUM_READERS = 7
+NUM_READERS = 10
 NUM_WRITERS = 1
-VALID_CPUS = "0,2,4,6,8,9,10,11"
+VALID_CPUS = "0,2,4,6"
 
 # Targets
 all: $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(CTP_SLOT_PAIR_BIN) $(CTP_SLOT_LIST_BIN) $(CTP_SLOT_LIST_BIN) $(CTP_SLOT_PAIR_BIN)
 
 $(QSBR_BIN): $(QSBR_SRC)
-	$(CC) $(CFLAGS) -o $@ $< $(QSBR_LIBS)
+	$(CC) $(CFLAGS) -o $@ -g $< $(QSBR_LIBS)
 
 $(SIGNAL_BIN): $(SIGNAL_SRC)
-	$(CC) $(CFLAGS) -o $@ $< $(SIGNAL_LIBS)
+	$(CC) $(CFLAGS) -o $@ -g $< $(SIGNAL_LIBS)
 
 $(QSBR_MB_BIN): $(QSBR_MB_SRC)
-	$(CC) $(CFLAGS) -o $@ $< $(QSBR_MB_LIBS)
+	$(CC) $(CFLAGS) -o $@ -g $< $(QSBR_MB_LIBS)
 
 $(QSBR_MEMB_BIN): $(QSBR_MEMB_SRC)
-	$(CC) $(CFLAGS) -o $@ $< $(QSBR_MEMB_LIBS)
+	$(CC) $(CFLAGS) -o $@ -g $< $(QSBR_MEMB_LIBS)
 
 $(QSBR_BP_BIN): $(QSBR_BP_SRC)
-	$(CC) $(CFLAGS) -o $@ $< $(QSBR_BP_LIBS)
+	$(CC) $(CFLAGS) -o $@ -g $< $(QSBR_BP_LIBS)
 
 
 $(CTP_SLOT_PAIR_BIN): $(CTP_SRC)
-	$(CC) $(CFLAGS) -DUSE_SLOT_PAIR_DESIGN -o $@ $< $(CTP_LIBS) -Wl,-rpath,..
+	$(CC) $(CFLAGS) -DUSE_SLOT_PAIR_DESIGN -o $@ -g $< $(CTP_LIBS) -Wl,-rpath,..
 
 $(CTP_SLOT_LIST_BIN): $(CTP_SRC)
-	$(CC) $(CFLAGS) -DUSE_SLOT_LIST_DESIGN -o $@ $< $(CTP_LIBS) -Wl,-rpath,..
+	$(CC) $(CFLAGS) -DUSE_SLOT_LIST_DESIGN -o $@ -g $< $(CTP_LIBS) -Wl,-rpath,..
 
 clean:
 	rm -f $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(CTP_SLOT_PAIR_BIN) $(CTP_SLOT_LIST_BIN)
-	rm -f ./csv/*.csv *.txt *.png
+	rm -f ./csv/*.csv *.txt *.png ./perf_output/* cachegrind.out.*
 
 perf: all
 	$(PERF_CMD) ./$(QSBR_BIN) $(NUM_READERS) $(NUM_WRITERS) $(VALID_CPUS)

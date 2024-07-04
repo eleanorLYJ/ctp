@@ -5,6 +5,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
 
+num_readers_list = [7]
+num_writers = 1
+valid_cpus = "0,2,4,6"
 # Paths to C source files and executables
 executables = ["./qsbr", "./bp", "./mb", "./memb", "./signal", "./slotpair", "./slotlist"]
 urcu_names = ["qsbr", "qsbr-bp", "qsbr-mb", "qsbr-memb", "signal", "slotpair", "slotlist"]
@@ -35,7 +38,7 @@ def execute_program(executable, num_readers, num_writers, cpus):
 
     # Prepare the taskset command with the specified CPUs
     cpu_list = ','.join(map(str, cpus))
-    taskset_command = ['taskset', '-c', cpu_list, executable, str(num_readers), str(num_writers), "0,2,4,6,8,9,10,11"]
+    taskset_command = ['taskset', '-c', cpu_list, executable, str(num_readers), str(num_writers), valid_cpus]
     
     result = subprocess.run(taskset_command, capture_output=True, text=True, env=env)
     return result.stdout
@@ -60,63 +63,64 @@ def parse_and_save_output(output, executable, num_readers, num_writers):
     csv_path = os.path.join(csv_dir, f"results_{executable[2:]}_{num_readers}_{num_writers}.csv")
     df.to_csv(csv_path, index=False)
 
-# Function to generate comparison plots
+ # Function to generate comparison plots
 def generate_plots():
     all_data = []
 
     for executable in executables:
-        for num_readers in range(1, 11):
-            for num_writers in [2]:  # Assuming number of writers remains constant
-                csv_path = os.path.join(csv_dir, f"results_{executable[2:]}_{num_readers}_{num_writers}.csv")
-                df = pd.read_csv(csv_path)
-                all_data.append(df)
+        for num_readers in num_readers_list:
+            csv_path = os.path.join(csv_dir, f"results_{executable[2:]}_{num_readers}_{num_writers}.csv")
+            df = pd.read_csv(csv_path)
+            all_data.append(df)
 
     combined_df = pd.concat(all_data)
-    
     colors = plt.cm.get_cmap('tab10', len(urcu_names))
 
-    # Reader comparison plot
+    # Reader comparison plot (bar chart with numbers)
     plt.figure(figsize=(12, 8))
-    for idx, exe in enumerate(combined_df["executable"].unique()):
-        subset_df = combined_df[combined_df["executable"] == exe]
-        plt.plot(subset_df["num_readers"], subset_df["total_reader_count"], label=f"{exe[2:]} readers", color=colors(idx))
-        
-        for x, y in zip(subset_df["num_readers"], subset_df["total_reader_count"]):
-            plt.text(x, y, str(y), fontsize=8)
+    bars = plt.bar(combined_df["executable"].unique(), combined_df.groupby('executable')['total_reader_count'].sum(), color=colors(range(len(urcu_names))))
+    plt.xlabel("Executable")
+    plt.ylabel("Total Reader Counts (Sum)")
+    plt.title("Total Reader Counts (Sum) by Executable")
+    plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
 
-    plt.xlabel("Number of Readers")
-    plt.ylabel("Total Reader Counts")
-    plt.title("Total Reader Counts by Number of Readers")
-    plt.legend()
-    plt.savefig("reader_comparison_plot.png")
+    # Add count values on top of bars
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width() / 2, yval + yval * 0.05, int(yval), ha='center', va='bottom', fontsize=8)
+
+    plt.tight_layout()
+    plt.savefig("reader_comparison_bar.png")
     plt.show()
 
-    # Writer comparison plot
+    # Writer comparison plot (bar chart with numbers) - similar to reader plot
     plt.figure(figsize=(12, 8))
-    for idx, exe in enumerate(combined_df["executable"].unique()):
-        subset_df = combined_df[combined_df["executable"] == exe]
-        plt.plot(subset_df["num_readers"], subset_df["total_writer_count"], label=f"{exe[2:]} writers", color=colors(idx))
-        
-        for x, y in zip(subset_df["num_readers"], subset_df["total_writer_count"]):
-            plt.text(x, y, str(y), fontsize=8)
-
-    plt.xlabel("Number of Readers")
+    bars = plt.bar(combined_df["executable"].unique(), combined_df.groupby('executable')['total_writer_count'].sum(), color=colors(range(len(urcu_names))))
+    plt.xlabel("Executable")
     plt.ylabel("Total Writer Counts")
-    plt.title("Total Writer Counts by Number of Readers")
-    plt.legend()
-    plt.savefig("writer_comparison_plot.png")
+    plt.title("Total Writer Counts by Executable")
+    plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width() / 2, yval + yval * 0.05, int(yval), ha='center', va='bottom', fontsize=8)
+
+    plt.tight_layout()
+    plt.savefig("writer_comparison_bar.png")
     plt.show()
+
 
 # Function to compile and execute for given number of readers and writers
 def compile_and_execute(num_readers):
-    num_writers = 2  # Modify this if you want to change the number of writers
+    num_writers = 1  # Modify this if you want to change the number of writers
 
     # Compile all programs
     compile_programs()
     # Generate CPU list based on the number of readers and writers
     total_threads = num_readers + num_writers
     num_cores = os.cpu_count() // 2  # Assuming hyperthreading is disabled, and you have half the number of logical CPUs
-    cpus = list(range(min(total_threads, num_cores)))
+    cpus = list(range(min(total_threads, num_cores))) 
+
     # Execute each compiled program and collect results
     for exe in executables:
         output = execute_program(exe, num_readers, num_writers, cpus)
@@ -124,7 +128,6 @@ def compile_and_execute(num_readers):
 
 # Main script execution
 def main():
-    num_readers_list = range(1, 11)
     
     with Pool() as pool:
         pool.map(compile_and_execute, num_readers_list)
