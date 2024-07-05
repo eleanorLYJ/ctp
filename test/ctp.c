@@ -1,8 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #define _BSD_SOURCE 600
 #define _DEFAULT_SOURCE
-
 #define _GNU_SOURCE
+
 #include <sched.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -16,12 +16,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "../thread_safe_global.h"
-#include "../atomics.h"
 #include <stdarg.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <stdatomic.h>
+#include "../thread_safe_global.h"
+#include "../atomics.h"
 
 #if !defined(USE_TSV_SLOT_PAIR_DESIGN) && !defined(USE_TSV_SUBSCRIPTION_SLOTS_DESIGN)
 #define USE_TSV_SLOT_PAIR_DESIGN
@@ -34,7 +34,6 @@
 #endif
 
 #define VERBOSE 1  // Set verbosity level
-#define MY_CALLOC(v, n) (((v) = calloc((n), sizeof((v)[0]))) == NULL)
 
 static void *reader(void *data);
 static void *writer(void *core_id);
@@ -56,14 +55,14 @@ enum magic {
     MAGIC_EXIT = 0xAABBCCDDFFEEDDCCUL,
 };
 
-void printf_verbose(const char *format, ...) {
-    if (VERBOSE) {
-        va_list args;
-        va_start(args, format);
-        vprintf(format, args);
-        va_end(args);
-    }
-}
+// void printf_verbose(const char *format, ...) {
+//     if (VERBOSE) {
+//         va_list args;
+//         va_start(args, format);
+//         vprintf(format, args);
+//         va_end(args);
+//     }
+// }
 
 void set_affinity(int cpu) {
     cpu_set_t cpuset;
@@ -89,30 +88,70 @@ void check_affinity() {
         return;
     }
     
-    for (int i = 0; i < CPU_SETSIZE; i++) {
-        if (CPU_ISSET(i, &cpuset)) {
-            printf("Thread %lu is running on CPU %d\n", current_thread, i);
-            fflush(stdout);
-        }
-    }
+    // for (int i = 0; i < CPU_SETSIZE; i++) {
+    //     if (CPU_ISSET(i, &cpuset)) {
+    //         printf("Thread %lu is running on CPU %d\n", current_thread, i);
+    //         fflush(stdout);
+    //     }
+    // }
 }
 
+// int valid_cpus[] = {0, 2, 4, 6, 8, 9, 10, 11}; // List of valid CPUs after disabling hyperthreading
+// int num_valid_cpus = sizeof(valid_cpus) / sizeof(valid_cpus[0]);
+
+int *valid_cpus;
+int num_valid_cpus;
+
+void parse_cpu_list(const char *cpu_list) {
+    char *token;
+    char *cpu_list_copy = strdup(cpu_list);
+    int count = 0;
+
+    token = strtok(cpu_list_copy, ",");
+    while (token != NULL) {
+        count++;
+        token = strtok(NULL, ",");
+    }
+
+    free(cpu_list_copy);
+    valid_cpus = malloc(count * sizeof(int));
+    if (!valid_cpus) {
+        perror("Failed to allocate memory for valid_cpus");
+        exit(EXIT_FAILURE);
+    }
+
+    cpu_list_copy = strdup(cpu_list);
+    count = 0;
+
+    token = strtok(cpu_list_copy, ",");
+    while (token != NULL) {
+        valid_cpus[count++] = atoi(token);
+        token = strtok(NULL, ",");
+    }
+
+    num_valid_cpus = count;
+    free(cpu_list_copy);
+}
+
+int get_valid_cpu(int core_id) {
+    return valid_cpus[core_id % num_valid_cpus];
+}
 
 int main(int argc, char *argv[]) 
 {
     num_cores = sysconf(_SC_NPROCESSORS_ONLN); 
 
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <num_readers> <num_writers>\n", argv[0]);
+    if (argc != 4) {
+        fprintf(stderr, "Usage: %s <num_readers> <num_writers> <valid_cpus>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
     size_t num_readers = atoi(argv[1]);
     size_t num_writers = atoi(argv[2]);
+    parse_cpu_list(argv[3]);
 
     pthread_t readers[num_readers], writers[num_writers];
     struct thread_info reader_info[num_readers], writer_info[num_writers];
-
 
     size_t i;
     uint64_t *magic_exit;
@@ -131,7 +170,6 @@ int main(int argc, char *argv[])
     }
     memset(readers, 0, sizeof(readers));
     memset(writers, 0, sizeof(writers));
-
 
     printf("Will use %ju reader threads and %ju writer threads\n",
            (uintmax_t)num_readers, (uintmax_t)num_writers);
@@ -156,7 +194,7 @@ int main(int argc, char *argv[])
         if ((errno = pthread_create(&writers[i], NULL, writer, &writer_info[i])) != 0)
             err(1, "Failed to create writer thread no. %ju", (uintmax_t)i);
     }
-    
+
     // Let the threads run for a while
     sleep(1);
     atomic_store(&stop_flag, true);
@@ -188,9 +226,9 @@ static void *
 reader(void *arg)
 {
     struct thread_info *info = (struct thread_info *)arg;
-    int core_id = info->core_id;
+    int core_id = get_valid_cpu(info->core_id);
 
-    if (core_id >= 0 && core_id < num_cores) {
+    if (core_id >= 0) {
         set_affinity(core_id);
     } else {
         fprintf(stderr, "Invalid core ID: %d\n", core_id);
@@ -233,24 +271,24 @@ reader(void *arg)
         }
     }
     info->count = nr_reads;
-    printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
+    // printf_verbose("thread_end %s, tid %lu\n", "reader", pthread_self());
     return NULL;
 }
-
 
 static void *
 writer(void *arg)
 {
     struct thread_info *info = (struct thread_info *)arg;
-    int core_id = info->core_id;
-    // Validate core_id
-    if (core_id >= 0 && core_id < num_cores) {
+    int core_id = get_valid_cpu(info->core_id);
+
+    if (core_id >= 0) {
         set_affinity(core_id);
     } else {
         fprintf(stderr, "Invalid core ID: %d\n", core_id);
         fflush(stderr);
     }
     check_affinity();
+
     unsigned long long nr_writes = 0;
     uint64_t version;
     uint64_t last_version = 0;
@@ -271,7 +309,7 @@ writer(void *arg)
         nr_writes++;
     }
 
-    printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
+    // printf_verbose("thread_end %s, tid %lu\n", "writer", pthread_self());
     info->count = nr_writes;
     return NULL;
 }
