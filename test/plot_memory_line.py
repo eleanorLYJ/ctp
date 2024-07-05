@@ -56,7 +56,8 @@ def plot_data(df):
     for exe in df['executable'].unique():
         subset_df = df[df['executable'] == exe]
         plt.plot(subset_df['num_readers'], subset_df['cache-misses'], marker='o', label=f'{exe} Cache Misses')
-        
+        # for x, y in zip(subset_df["num_readers"], subset_df["cache-misses"]):
+            # plt.text(x, y, str(y), fontsize=8)
     plt.xlabel('Number of Readers')
     plt.ylabel('Cache Misses')
     plt.title('Cache Misses vs. Number of Readers')
@@ -70,7 +71,8 @@ def plot_data(df):
     for exe in df['executable'].unique():
         subset_df = df[df['executable'] == exe]
         plt.plot(subset_df['num_readers'], subset_df['L1-dcache-store-misses'], marker='o', label=f'{exe} L1 Dcache Store Misses')
-        
+        # for x, y in zip(subset_df["num_readers"], subset_df["L1-dcache-store-misses"]):
+            # plt.text(x, y, str(y), fontsize=8)
     plt.xlabel('Number of Readers')
     plt.ylabel('L1 Dcache Store Misses')
     plt.title('L1 Dcache Store Misses vs. Number of Readers')
@@ -79,12 +81,14 @@ def plot_data(df):
     plt.savefig('L1_dcache_store_misses_plot.png')
     plt.show()
 
+
     # 'L1-dcache-load-misses':0,
     plt.figure(figsize=(12, 8))
     for exe in df['executable'].unique():
         subset_df = df[df['executable'] == exe]
         plt.plot(subset_df['num_readers'], subset_df['L1-dcache-load-misses'], marker='o', label=f'{exe} L1 Dcache Load Misses')
-        
+        # for x, y in zip(subset_df["num_readers"], subset_df["L1-dcache-load-misses"]):
+            # plt.text(x, y, str(y), fontsize=8)
     plt.xlabel('Number of Readers')
     plt.ylabel('L1 Dcache Load Misses')
     plt.title('L1 Dcache Load Misses vs. Number of Readers')
@@ -97,7 +101,8 @@ def plot_data(df):
     for exe in df['executable'].unique():
         subset_df = df[df['executable'] == exe]
         plt.plot(subset_df['num_readers'], subset_df['L1-dcache-stores'], marker='o', label=f'{exe} L1 Dcache Store')
-        
+        # for x, y in zip(subset_df["num_readers"], subset_df["L1-dcache-stores"]):
+            # plt.text(x, y, str(y), fontsize=8)
     plt.xlabel('Number of Readers')
     plt.ylabel('L1 Dcache Stores')
     plt.title('L1 Dcache Stores vs. Number of Readers')
@@ -110,7 +115,8 @@ def plot_data(df):
     for exe in df['executable'].unique():
         subset_df = df[df['executable'] == exe]
         plt.plot(subset_df['num_readers'], subset_df['L1-dcache-loads'], marker='o', label=f'{exe} L1 Dcache Load')
-        
+        # for x, y in zip(subset_df["num_readers"], subset_df["L1-dcache-loads"]):
+            # plt.text(x, y, str(y), fontsize=8)
     plt.xlabel('Number of Readers')
     plt.ylabel('L1 Dcache Loads')
     plt.title('L1 Dcache Loads vs. Number of Readers')
@@ -118,8 +124,36 @@ def plot_data(df):
     plt.grid(True)
     plt.savefig('L1-dcache-loads_plot.png')
     plt.show()
+
+    plt.figure(figsize=(12, 8))
+    for exe in df['executable'].unique():
+        subset_df = df[df['executable'] == exe]
+        plt.plot(subset_df['num_readers'], subset_df['LLC-load-misses'], marker='o', label=f'{exe} LLC load misses')
+        # for x, y in zip(subset_df["num_readers"], subset_df["LLC-load-misses"]):
+            # plt.text(x, y, str(y), fontsize=8)
+    plt.xlabel('Number of Readers')
+    plt.ylabel('LL Load Misses')
+    plt.title('LL Load Misses vs. Number of Readers')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('L1-dcache-loads_plot.png')
+    plt.show()
+
+    plt.figure(figsize=(12, 8))
+    for exe in df['executable'].unique():
+        subset_df = df[df['executable'] == exe]
+        plt.plot(subset_df['num_readers'], subset_df['LLC-store-misses'], marker='o', label=f'{exe} LLC Store misses')
+        # for x, y in zip(subset_df["num_readers"], subset_df["LLC-store-misses"]):
+            # plt.text(x, y, str(y), fontsize=8)
+    plt.xlabel('Number of Readers')
+    plt.ylabel('LL Store Misses')
+    plt.title('LL Store Misses vs. Number of Readers')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('L1-dcache-stores_plot.png')
+    plt.show()
 def main():
-    output_dir = 'perf_output'
+    output_dir = 'output'
     df = collect_data(output_dir)
     plot_data(df)
 

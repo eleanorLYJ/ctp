@@ -60,7 +60,7 @@ $(CTP_SLOT_LIST_BIN): $(CTP_SRC)
 
 clean:
 	rm -f $(QSBR_BIN) $(SIGNAL_BIN) $(QSBR_MB_BIN) $(QSBR_MEMB_BIN) $(QSBR_BP_BIN) $(CTP_SLOT_PAIR_BIN) $(CTP_SLOT_LIST_BIN)
-	rm -f ./csv/*.csv *.txt *.png ./perf_output/* cachegrind.out.*
+	rm -fr ./csv/* *.txt *.png ./output/* cachegrind.out.*
 
 perf: all
 	$(PERF_CMD) ./$(QSBR_BIN) $(NUM_READERS) $(NUM_WRITERS) $(VALID_CPUS)

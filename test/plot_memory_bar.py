@@ -33,7 +33,7 @@ def parse_perf_output(file_path):
 
 def collect_data(output_dir):
     data = []
-
+    print("dir: ", output_dir)
     for file_name in os.listdir(output_dir):
         if file_name.startswith('perf_output'):
             parts = re.search(r'perf_output_(\w+)_([\d]+)_readers', file_name)
@@ -179,7 +179,7 @@ def plot_data(df):
     plt.show()
 
 def main():
-    output_dir = 'perf_output'
+    output_dir = 'output'
     df = collect_data(output_dir)
     plot_data(df)
 
