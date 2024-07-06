@@ -13,10 +13,8 @@ valid_cpus = sys.argv[3]
 output_dir = sys.argv[4]
 
 # Paths to C source files and executables
-# executables = ["./qsbr", "./bp", "./mb", "./memb", "./signal", "./slotpair", "./slotlist"]
-# urcu_names = ["qsbr", "qsbr-bp", "qsbr-mb", "qsbr-memb", "signal", "slotpair", "slotlist"]
-
-executables = ["./bp", "./bp_no_reg" ]
+executables = ["./qsbr", "./bp", "./mb", "./memb", "./signal", "./slotpair", "./slotlist"]
+urcu_names = ["qsbr", "qsbr-bp", "qsbr-mb", "qsbr-memb", "signal", "slotpair", "slotlist"]
 
 # Directory to save CSV files
 csv_dir = os.path.join(output_dir, "csv")
